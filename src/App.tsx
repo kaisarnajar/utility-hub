@@ -5,7 +5,7 @@ import { ToolCard } from './components/ToolCard';
 import { ToolModal } from './components/ToolModal';
 import { TOOLS_REGISTRY, CATEGORIES, Category, ToolItem } from './tools/toolsRegistry';
 import { ThemeProvider } from './context/ThemeContext';
-import { SearchX, Sparkles, Shield, Zap } from 'lucide-react';
+import { SearchX, Zap } from 'lucide-react';
 
 export const AppContent: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');

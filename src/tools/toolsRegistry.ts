@@ -2,10 +2,7 @@ import React from 'react';
 import {
   Timer,
   QrCode,
-  KeyRound,
   FileJson,
-  Binary,
-  Hash,
   Youtube,
   Twitter,
   Instagram,
@@ -14,10 +11,7 @@ import {
 
 import { PomodoroTool } from './pomodoro/Pomodoro';
 import { QRCodeTool } from './qr-code/QRCodeGen';
-import { PasswordGenTool } from './password-generator/PasswordGen';
 import { JsonFormatterTool } from './json-formatter/JsonFormatter';
-import { Base64Tool } from './base64/Base64Tool';
-import { UuidGenTool } from './uuid-generator/UuidGen';
 import { YoutubeDownloaderTool } from './youtube-downloader/YoutubeDownloader';
 import { TwitterDownloaderTool } from './twitter-downloader/TwitterDownloader';
 import { InstagramDownloaderTool } from './instagram-downloader/InstagramDownloader';
@@ -63,15 +57,6 @@ export const TOOLS_REGISTRY: ToolItem[] = [
     component: QRCodeTool,
   },
   {
-    id: 'password-generator',
-    name: 'Password Generator',
-    description: 'Create cryptographically secure, customizable passwords with strength indicators and batch export.',
-    category: 'utilities',
-    icon: KeyRound,
-    status: 'ready',
-    component: PasswordGenTool,
-  },
-  {
     id: 'json-formatter',
     name: 'JSON Formatter & Validator',
     description: 'Clean, format, validate, and minify JSON data with custom indentation and line highlighting.',
@@ -79,24 +64,6 @@ export const TOOLS_REGISTRY: ToolItem[] = [
     icon: FileJson,
     status: 'ready',
     component: JsonFormatterTool,
-  },
-  {
-    id: 'base64',
-    name: 'Base64 Encoder / Decoder',
-    description: 'Encode and decode text and files into Base64 or URL-safe format instantly in browser.',
-    category: 'developer',
-    icon: Binary,
-    status: 'ready',
-    component: Base64Tool,
-  },
-  {
-    id: 'uuid-generator',
-    name: 'UUID / GUID Generator',
-    description: 'Generate RFC4122 compliant version-4 UUIDs in bulk with uppercase and hyphen options.',
-    category: 'developer',
-    icon: Hash,
-    status: 'ready',
-    component: UuidGenTool,
   },
   {
     id: 'youtube-downloader',
