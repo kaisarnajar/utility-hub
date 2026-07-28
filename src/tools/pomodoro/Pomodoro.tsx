@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, CheckCircle, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, CheckCircle, Settings, Bell } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 type Mode = 'work' | 'shortBreak' | 'longBreak';
@@ -29,19 +29,19 @@ export const PomodoroTool: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
-  const timerRef = useRef<number | null>(null);
+  // Store target end timestamp (in ms) to prevent tab throttling slowdowns
+  const targetEndTimeRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
 
-  // Sync time left when mode or custom duration changes (if not currently running)
+  // Request browser desktop notification permission
   useEffect(() => {
-    if (!isRunning) {
-      if (mode === 'work') setTimeLeft(workTime * 60);
-      else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
-      else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
-  }, [mode, workTime, shortBreakTime, longBreakTime]);
+  }, []);
 
   // Web Audio API sound chime
-  const playAlertSound = () => {
+  const playAlertSound = useCallback(() => {
     if (!soundEnabled) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -63,61 +63,17 @@ export const PomodoroTool: React.FC = () => {
     } catch (e) {
       console.warn('Audio playback error', e);
     }
-  };
+  }, [soundEnabled]);
 
-  // Timer Tick
-  useEffect(() => {
-    if (isRunning) {
-      timerRef.current = window.setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            setIsRunning(false);
-            playAlertSound();
-
-            if (mode === 'work') {
-              const newCount = completedSessions + 1;
-              setCompletedSessions(newCount);
-              confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
-              // Automatically switch to break
-              if (newCount % 4 === 0) {
-                setMode('longBreak');
-              } else {
-                setMode('shortBreak');
-              }
-            } else {
-              setMode('work');
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
+  const sendDesktopNotification = useCallback((title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, { body, icon: './favicon.svg' });
+      } catch (e) {
+        console.warn('Desktop notification error', e);
+      }
     }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isRunning, mode, completedSessions, soundEnabled]);
-
-  const handleStartPause = () => {
-    setIsRunning((prev) => !prev);
-  };
-
-  const handleReset = () => {
-    setIsRunning(false);
-    if (mode === 'work') setTimeLeft(workTime * 60);
-    else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
-    else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
-  };
-
-  const handleSkip = () => {
-    setIsRunning(false);
-    if (mode === 'work') setMode('shortBreak');
-    else setMode('work');
-  };
+  }, []);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -125,9 +81,123 @@ export const PomodoroTool: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Update browser tab title with current timer
+  useEffect(() => {
+    if (isRunning) {
+      document.title = `(${formatTime(timeLeft)}) ${MODES[mode].name} - Utility Hub`;
+    } else {
+      document.title = 'Utility Hub - Fast, Private Browser Tools';
+    }
+    return () => {
+      document.title = 'Utility Hub - Fast, Private Browser Tools';
+    };
+  }, [timeLeft, isRunning, mode]);
+
+  // Handle session completion logic
+  const handleSessionComplete = useCallback(() => {
+    setIsRunning(false);
+    targetEndTimeRef.current = null;
+    playAlertSound();
+
+    if (mode === 'work') {
+      const newCount = completedSessions + 1;
+      setCompletedSessions(newCount);
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.7 } });
+      sendDesktopNotification('Focus Session Complete!', 'Great job! Time to take a well-deserved break.');
+
+      if (newCount % 4 === 0) {
+        setMode('longBreak');
+      } else {
+        setMode('shortBreak');
+      }
+    } else {
+      sendDesktopNotification('Break Over!', 'Time to get back to focus time.');
+      setMode('work');
+    }
+  }, [mode, completedSessions, playAlertSound, sendDesktopNotification]);
+
+  // Sync initial mode duration when idle
+  useEffect(() => {
+    if (!isRunning) {
+      if (mode === 'work') setTimeLeft(workTime * 60);
+      else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
+      else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+    }
+  }, [mode, workTime, shortBreakTime, longBreakTime, isRunning]);
+
+  // Wall-Clock Timestamp Timer Tick (Resistant to browser tab background throttling)
+  useEffect(() => {
+    if (isRunning) {
+      if (!targetEndTimeRef.current) {
+        targetEndTimeRef.current = Date.now() + timeLeft * 1000;
+      }
+
+      const updateTimer = () => {
+        if (!targetEndTimeRef.current) return;
+        const now = Date.now();
+        const diffMs = targetEndTimeRef.current - now;
+        const remainingSecs = Math.max(0, Math.ceil(diffMs / 1000));
+
+        setTimeLeft(remainingSecs);
+
+        if (remainingSecs <= 0) {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          handleSessionComplete();
+        }
+      };
+
+      // Tick every 250ms for accuracy
+      timerIntervalRef.current = window.setInterval(updateTimer, 250);
+
+      // Handle tab visibility change (instant catch-up when tab comes back into focus)
+      const handleVisibilityChange = () => {
+        if (!document.hidden && isRunning && targetEndTimeRef.current) {
+          updateTimer();
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    } else {
+      targetEndTimeRef.current = null;
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    }
+  }, [isRunning, handleSessionComplete]);
+
+  const handleStartPause = () => {
+    if (isRunning) {
+      // Pausing: save exact time left and clear target end time
+      setIsRunning(false);
+      targetEndTimeRef.current = null;
+    } else {
+      // Starting: set new target end timestamp based on current time left
+      targetEndTimeRef.current = Date.now() + timeLeft * 1000;
+      setIsRunning(true);
+    }
+  };
+
+  const handleReset = () => {
+    setIsRunning(false);
+    targetEndTimeRef.current = null;
+    if (mode === 'work') setTimeLeft(workTime * 60);
+    else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
+    else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+  };
+
+  const handleSkip = () => {
+    setIsRunning(false);
+    targetEndTimeRef.current = null;
+    if (mode === 'work') setMode('shortBreak');
+    else setMode('work');
+  };
+
   const totalModeDuration =
     mode === 'work' ? workTime * 60 : mode === 'shortBreak' ? shortBreakTime * 60 : longBreakTime * 60;
-  const progressPercent = ((totalModeDuration - timeLeft) / totalModeDuration) * 100;
+  const progressPercent = Math.min(100, Math.max(0, ((totalModeDuration - timeLeft) / totalModeDuration) * 100));
 
   return (
     <div className="tool-container" style={{ maxWidth: '520px', margin: '0 auto' }}>
@@ -147,6 +217,7 @@ export const PomodoroTool: React.FC = () => {
             key={m}
             onClick={() => {
               setIsRunning(false);
+              targetEndTimeRef.current = null;
               setMode(m);
             }}
             style={{
@@ -211,7 +282,7 @@ export const PomodoroTool: React.FC = () => {
             strokeDasharray={2 * Math.PI * 110}
             strokeDashoffset={(2 * Math.PI * 110 * (100 - progressPercent)) / 100}
             strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+            style={{ transition: 'stroke-dashoffset 0.3s ease' }}
           />
         </svg>
 
