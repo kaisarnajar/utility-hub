@@ -1,0 +1,375 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, CheckCircle, Settings } from 'lucide-react';
+import confetti from 'canvas-confetti';
+
+type Mode = 'work' | 'shortBreak' | 'longBreak';
+
+interface ModeConfig {
+  name: string;
+  defaultTime: number; // in seconds
+  color: string;
+}
+
+const MODES: Record<Mode, ModeConfig> = {
+  work: { name: 'Focus Time', defaultTime: 25 * 60, color: '#6366f1' },
+  shortBreak: { name: 'Short Break', defaultTime: 5 * 60, color: '#10b981' },
+  longBreak: { name: 'Long Break', defaultTime: 15 * 60, color: '#06b6d4' },
+};
+
+export const PomodoroTool: React.FC = () => {
+  const [mode, setMode] = useState<Mode>('work');
+  const [workTime, setWorkTime] = useState<number>(25);
+  const [shortBreakTime, setShortBreakTime] = useState<number>(5);
+  const [longBreakTime, setLongBreakTime] = useState<number>(15);
+
+  const [timeLeft, setTimeLeft] = useState<number>(25 * 60);
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [completedSessions, setCompletedSessions] = useState<number>(0);
+  const [currentTask, setCurrentTask] = useState<string>('');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  const timerRef = useRef<number | null>(null);
+
+  // Sync time left when mode or custom duration changes (if not currently running)
+  useEffect(() => {
+    if (!isRunning) {
+      if (mode === 'work') setTimeLeft(workTime * 60);
+      else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
+      else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+    }
+  }, [mode, workTime, shortBreakTime, longBreakTime]);
+
+  // Web Audio API sound chime
+  const playAlertSound = () => {
+    if (!soundEnabled) return;
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
+    } catch (e) {
+      console.warn('Audio playback error', e);
+    }
+  };
+
+  // Timer Tick
+  useEffect(() => {
+    if (isRunning) {
+      timerRef.current = window.setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            setIsRunning(false);
+            playAlertSound();
+
+            if (mode === 'work') {
+              const newCount = completedSessions + 1;
+              setCompletedSessions(newCount);
+              confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+              // Automatically switch to break
+              if (newCount % 4 === 0) {
+                setMode('longBreak');
+              } else {
+                setMode('shortBreak');
+              }
+            } else {
+              setMode('work');
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isRunning, mode, completedSessions, soundEnabled]);
+
+  const handleStartPause = () => {
+    setIsRunning((prev) => !prev);
+  };
+
+  const handleReset = () => {
+    setIsRunning(false);
+    if (mode === 'work') setTimeLeft(workTime * 60);
+    else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
+    else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+  };
+
+  const handleSkip = () => {
+    setIsRunning(false);
+    if (mode === 'work') setMode('shortBreak');
+    else setMode('work');
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const totalModeDuration =
+    mode === 'work' ? workTime * 60 : mode === 'shortBreak' ? shortBreakTime * 60 : longBreakTime * 60;
+  const progressPercent = ((totalModeDuration - timeLeft) / totalModeDuration) * 100;
+
+  return (
+    <div className="tool-container" style={{ maxWidth: '520px', margin: '0 auto' }}>
+      {/* Mode Selector Tabs */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '0.5rem',
+          backgroundColor: 'var(--bg-subtle)',
+          padding: '0.35rem',
+          borderRadius: 'var(--radius-lg)',
+        }}
+      >
+        {(Object.keys(MODES) as Mode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => {
+              setIsRunning(false);
+              setMode(m);
+            }}
+            style={{
+              flex: 1,
+              padding: '0.6rem 0.5rem',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              backgroundColor: mode === m ? 'var(--bg-card)' : 'transparent',
+              color: mode === m ? 'var(--accent-primary)' : 'var(--text-muted)',
+              fontWeight: mode === m ? 700 : 500,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              boxShadow: mode === m ? 'var(--shadow-sm)' : 'none',
+              transition: 'all var(--transition-fast)',
+            }}
+          >
+            {MODES[m].name}
+          </button>
+        ))}
+      </div>
+
+      {/* Task Input */}
+      <div style={{ textAlign: 'center' }}>
+        <input
+          type="text"
+          placeholder="What task are you focusing on?"
+          value={currentTask}
+          onChange={(e) => setCurrentTask(e.target.value)}
+          className="tool-input-field"
+          style={{ textAlign: 'center', width: '100%' }}
+        />
+      </div>
+
+      {/* Timer Circle */}
+      <div
+        style={{
+          position: 'relative',
+          width: '260px',
+          height: '260px',
+          margin: '1rem auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <svg width="260" height="260" style={{ transform: 'rotate(-90deg)' }}>
+          <circle
+            cx="130"
+            cy="130"
+            r="110"
+            stroke="var(--border-color)"
+            strokeWidth="10"
+            fill="transparent"
+          />
+          <circle
+            cx="130"
+            cy="130"
+            r="110"
+            stroke={MODES[mode].color}
+            strokeWidth="10"
+            fill="transparent"
+            strokeDasharray={2 * Math.PI * 110}
+            strokeDashoffset={(2 * Math.PI * 110 * (100 - progressPercent)) / 100}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+          />
+        </svg>
+
+        <div
+          style={{
+            position: 'absolute',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '3.25rem',
+              fontWeight: 800,
+              color: 'var(--text-main)',
+              lineHeight: 1,
+            }}
+          >
+            {formatTime(timeLeft)}
+          </span>
+          <span
+            style={{
+              fontSize: '0.85rem',
+              color: MODES[mode].color,
+              fontWeight: 600,
+              marginTop: '0.5rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            {MODES[mode].name}
+          </span>
+        </div>
+      </div>
+
+      {/* Control Buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+        <button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className="btn-secondary"
+          style={{ padding: '0.75rem', borderRadius: 'var(--radius-full)' }}
+          title={soundEnabled ? 'Mute Chime' : 'Unmute Chime'}
+        >
+          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
+
+        <button
+          onClick={handleStartPause}
+          className="btn-primary"
+          style={{
+            padding: '0.85rem 2rem',
+            borderRadius: 'var(--radius-full)',
+            fontSize: '1.1rem',
+            minWidth: '140px',
+            backgroundColor: MODES[mode].color,
+          }}
+        >
+          {isRunning ? <Pause size={22} /> : <Play size={22} />}
+          {isRunning ? 'Pause' : 'Start'}
+        </button>
+
+        <button
+          onClick={handleReset}
+          className="btn-secondary"
+          style={{ padding: '0.75rem', borderRadius: 'var(--radius-full)' }}
+          title="Reset Timer"
+        >
+          <RotateCcw size={20} />
+        </button>
+
+        <button
+          onClick={handleSkip}
+          className="btn-secondary"
+          style={{ padding: '0.75rem', borderRadius: 'var(--radius-full)' }}
+          title="Skip Session"
+        >
+          <SkipForward size={20} />
+        </button>
+      </div>
+
+      {/* Stats & Settings Toggle */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderTop: '1px solid var(--border-color)',
+          paddingTop: '1rem',
+          marginTop: '0.5rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          <CheckCircle size={18} color="var(--badge-ready-color)" />
+          <span>Sessions Completed: <strong>{completedSessions}</strong></span>
+        </div>
+
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="btn-secondary"
+          style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+        >
+          <Settings size={14} /> Settings
+        </button>
+      </div>
+
+      {/* Custom Time Settings Panel */}
+      {showSettings && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-subtle)',
+            padding: '1rem',
+            borderRadius: 'var(--radius-md)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '0.75rem',
+            marginTop: '0.5rem',
+          }}
+        >
+          <div className="tool-input-group">
+            <label className="tool-label">Focus (min)</label>
+            <input
+              type="number"
+              min="1"
+              max="90"
+              value={workTime}
+              onChange={(e) => setWorkTime(Math.max(1, parseInt(e.target.value) || 1))}
+              className="tool-input-field"
+            />
+          </div>
+
+          <div className="tool-input-group">
+            <label className="tool-label">Short (min)</label>
+            <input
+              type="number"
+              min="1"
+              max="30"
+              value={shortBreakTime}
+              onChange={(e) => setShortBreakTime(Math.max(1, parseInt(e.target.value) || 1))}
+              className="tool-input-field"
+            />
+          </div>
+
+          <div className="tool-input-group">
+            <label className="tool-label">Long (min)</label>
+            <input
+              type="number"
+              min="1"
+              max="60"
+              value={longBreakTime}
+              onChange={(e) => setLongBreakTime(Math.max(1, parseInt(e.target.value) || 1))}
+              className="tool-input-field"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
