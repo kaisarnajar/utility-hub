@@ -371,16 +371,12 @@ export const PomodoroTool: React.FC = () => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           borderTop: '1px solid var(--border-color)',
           paddingTop: '1rem',
           marginTop: '0.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          <CheckCircle size={18} color="var(--badge-ready-color)" />
-          <span>Sessions Completed: <strong>{completedSessions}</strong></span>
-        </div>
 
         <button
           onClick={() => setShowSettings(!showSettings)}
