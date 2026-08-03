@@ -73,7 +73,9 @@ export const ToolPage: React.FC<ToolPageProps> = ({ tool, onBack }) => {
           <div>
             <div className="tool-page-title-row">
               <h1 className="tool-page-title">{tool.name}</h1>
-              <span className="status-badge ready">Available</span>
+              {tool.status === 'coming_soon' && (
+                <span className="status-badge coming-soon">Coming Soon</span>
+              )}
             </div>
             <p className="tool-page-description">{tool.description}</p>
           </div>

@@ -18,9 +18,11 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool, onOpen }) => {
           <div className="tool-icon-wrapper">
             <IconComponent size={24} />
           </div>
-          <span className={`status-badge ${isReady ? 'ready' : 'coming-soon'}`}>
-            {isReady ? 'Available' : 'Coming Soon'}
-          </span>
+          {!isReady && (
+            <span className="status-badge coming-soon">
+              Coming Soon
+            </span>
+          )}
         </div>
 
         <div className="tool-card-body">
