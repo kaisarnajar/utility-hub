@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Twitter, Download, AlertCircle, Loader2, Play, Image, Sparkles } from 'lucide-react';
+import { Twitter, Download, AlertCircle, Loader2, Play, Image, Check, FileVideo } from 'lucide-react';
 
 interface TwitterMedia {
   type: 'video' | 'photo' | 'animated_gif';
@@ -22,6 +22,8 @@ export const TwitterDownloaderTool: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [tweetData, setTweetData] = useState<TweetData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
 
   const extractTweetId = (inputUrl: string): string | null => {
     const match = inputUrl.match(/(?:twitter\.com|x\.com)\/(?:[a-zA-Z0-9_]+)\/status\/([0-9]+)/);
@@ -30,9 +32,11 @@ export const TwitterDownloaderTool: React.FC = () => {
 
   const handleFetchTweet = async () => {
     setError(null);
+    setDownloadSuccess(null);
+
     const tweetId = extractTweetId(url.trim());
     if (!tweetId) {
-      setError('Please enter a valid Twitter / X post URL (e.g. https://x.com/user/status/123456).');
+      setError('Please enter a valid Twitter / X post URL (e.g. https://x.com/username/status/123456789).');
       setTweetData(null);
       return;
     }
@@ -40,19 +44,17 @@ export const TwitterDownloaderTool: React.FC = () => {
     setLoading(true);
 
     try {
-      // Twitter public syndication API (CORS friendly)
+      // Primary: Twitter syndication API
       const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=x`);
-      if (!res.ok) throw new Error('Could not fetch post details.');
+      if (!res.ok) throw new Error('Could not fetch Twitter post data directly.');
 
       const data = await res.json();
-
       const mediaItems: TwitterMedia[] = [];
 
-      if (data.mediaDetails) {
+      if (data.mediaDetails && Array.isArray(data.mediaDetails)) {
         data.mediaDetails.forEach((item: any) => {
           if (item.type === 'video' || item.type === 'animated_gif') {
             const variants = item.video_info?.variants || [];
-            // Filter mp4 variants and sort by bitrate descending
             const mp4Variants = variants
               .filter((v: any) => v.content_type === 'video/mp4')
               .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
@@ -74,48 +76,63 @@ export const TwitterDownloaderTool: React.FC = () => {
 
       setTweetData({
         id: tweetId,
-        text: data.text || '',
-        authorName: data.user?.name || 'Twitter User',
+        text: data.text || 'Twitter / X Post',
+        authorName: data.user?.name || 'X User',
         authorHandle: `@${data.user?.screen_name || 'user'}`,
         avatarUrl: data.user?.profile_image_url_https || '',
         media: mediaItems,
       });
 
       if (mediaItems.length === 0) {
-        setError('This post does not contain any video or image media files to download.');
+        setError('This Twitter post does not contain any video or image media files.');
       }
     } catch (err: any) {
-      // Fallback service link
-      setError('Failed to load Twitter media directly. Click below to use fallback direct download.');
-      setTweetData({
-        id: tweetId,
-        text: 'Twitter Post Media',
-        authorName: 'X / Twitter Post',
-        authorHandle: `@post`,
-        avatarUrl: '',
-        media: [],
-      });
+      setError(err.message || 'Failed to parse Twitter media.');
+      setTweetData(null);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDownloadFile = async (fileUrl: string, filename: string) => {
+    setDownloadingFile(filename);
+    setDownloadSuccess(null);
+
     try {
-      const res = await fetch(fileUrl);
+      // Attempt in-app CORS fetch blob
+      const res = await fetch(fileUrl, { mode: 'cors' });
+      if (!res.ok) throw new Error('Network fetch blocked');
+
       const blob = await res.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      const blobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+
+      setDownloadSuccess(filename);
     } catch (e) {
-      window.open(fileUrl, '_blank');
+      // Native browser trigger without navigating or opening external web pages
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.download = filename;
+      a.target = '_self';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setDownloadSuccess(filename);
+    } finally {
+      setDownloadingFile(null);
     }
   };
 
   return (
-    <div className="tool-container" style={{ maxWidth: '720px', margin: '0 auto' }}>
+    <div className="tool-container" style={{ maxWidth: '780px', margin: '0 auto' }}>
       {/* Input Form */}
       <div className="tool-input-group">
         <label className="tool-label">Twitter / X Post URL</label>
@@ -154,7 +171,7 @@ export const TwitterDownloaderTool: React.FC = () => {
         </div>
       )}
 
-      {/* Tweet Details & Media List */}
+      {/* Tweet Details & In-App Media Downloader */}
       {tweetData && (
         <div
           style={{
@@ -203,71 +220,81 @@ export const TwitterDownloaderTool: React.FC = () => {
                   <img
                     src={item.photoUrl}
                     alt="Twitter photo"
-                    style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }}
+                    style={{ maxWidth: '100%', maxHeight: '380px', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }}
                   />
                   <button
-                    onClick={() => handleDownloadFile(item.photoUrl!, `twitter-photo-${tweetData.id}.jpg`)}
+                    onClick={() => handleDownloadFile(item.photoUrl!, `twitter-photo-${tweetData.id}-${idx + 1}.jpg`)}
+                    disabled={downloadingFile === `twitter-photo-${tweetData.id}-${idx + 1}.jpg`}
                     className="btn-primary"
-                    style={{ marginTop: '0.85rem', width: '100%' }}
+                    style={{ marginTop: '0.85rem', width: '100%', justifyContent: 'center' }}
                   >
-                    <Download size={16} /> Download Photo (HD)
+                    {downloadingFile === `twitter-photo-${tweetData.id}-${idx + 1}.jpg` ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : downloadSuccess === `twitter-photo-${tweetData.id}-${idx + 1}.jpg` ? (
+                      <Check size={16} color="#10b981" />
+                    ) : (
+                      <Image size={16} />
+                    )}
+                    {downloadingFile === `twitter-photo-${tweetData.id}-${idx + 1}.jpg`
+                      ? 'Downloading Image...'
+                      : downloadSuccess === `twitter-photo-${tweetData.id}-${idx + 1}.jpg`
+                      ? 'Downloaded to Device!'
+                      : 'Download High-Res Image'}
                   </button>
                 </div>
               ) : (
                 <div>
-                  <div style={{ position: 'relative', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginBottom: '0.85rem' }}>
-                    <img
-                      src={item.previewUrl}
-                      alt="Video preview"
-                      style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }}
-                    />
-                  </div>
+                  {/* Embedded Video Player */}
+                  {item.variants && item.variants.length > 0 && (
+                    <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', backgroundColor: '#000', marginBottom: '1rem' }}>
+                      <video
+                        src={item.variants[0].url}
+                        controls
+                        poster={item.previewUrl}
+                        style={{ width: '100%', maxHeight: '350px', display: 'block' }}
+                      />
+                    </div>
+                  )}
 
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
-                    Select Video Resolution to Download:
+                    Download Video Directly In-App (No Redirects):
                   </span>
 
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {item.variants && item.variants.length > 0 ? (
                       item.variants.map((v, vIdx) => {
-                        // Extract resolution from bitrate or label
-                        const label = v.bitrate > 1000000 ? '720p HD' : v.bitrate > 500000 ? '480p SD' : '360p Low';
+                        const label = v.bitrate > 1000000 ? '1080p / 720p HD' : v.bitrate > 500000 ? '480p SD' : '360p Mobile';
+                        const fileName = `twitter-video-${tweetData.id}-${vIdx + 1}.mp4`;
+                        const isDownloading = downloadingFile === fileName;
+                        const isDone = downloadSuccess === fileName;
+
                         return (
                           <button
                             key={vIdx}
-                            onClick={() => handleDownloadFile(v.url, `twitter-video-${tweetData.id}-${vIdx}.mp4`)}
+                            onClick={() => handleDownloadFile(v.url, fileName)}
+                            disabled={isDownloading}
                             className="btn-primary"
-                            style={{ flex: 1, minWidth: '120px', padding: '0.55rem 0.85rem', fontSize: '0.85rem' }}
+                            style={{ flex: 1, minWidth: '130px', padding: '0.6rem 0.85rem', fontSize: '0.83rem', justifyContent: 'center' }}
                           >
-                            <Download size={16} /> MP4 ({label})
+                            {isDownloading ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : isDone ? (
+                              <Check size={16} color="#10b981" />
+                            ) : (
+                              <FileVideo size={16} />
+                            )}
+                            {isDownloading ? 'Downloading...' : `MP4 (${label})`}
                           </button>
                         );
                       })
                     ) : (
-                      <button
-                        onClick={() => window.open(`https://twitsave.com/info?url=${encodeURIComponent(url)}`, '_blank')}
-                        className="btn-primary"
-                        style={{ width: '100%' }}
-                      >
-                        <Download size={16} /> Download MP4 Video
-                      </button>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No downloadable video streams found for this post.</span>
                     )}
                   </div>
                 </div>
               )}
             </div>
           ))}
-
-          {/* External Fallback helper if media is restricted */}
-          <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
-            <button
-              onClick={() => window.open(`https://twitsave.com/info?url=${encodeURIComponent(url)}`, '_blank')}
-              className="btn-secondary"
-              style={{ width: '100%', fontSize: '0.85rem' }}
-            >
-              Open via TwitSave (External Fallback)
-            </button>
-          </div>
         </div>
       )}
     </div>
