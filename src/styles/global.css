@@ -526,7 +526,6 @@ html, body {
 [data-theme='light'] .json-number { color: #d97706; font-weight: 600; }
 [data-theme='light'] .json-boolean { color: #9333ea; font-weight: 600; }
 [data-theme='light'] .json-null { color: #dc2626; font-weight: 600; }
-[data-theme='light'] .json-bracket { color: #4f46e5; font-weight: 700; }
 [data-theme='light'] .json-colon { color: #64748b; font-weight: 600; }
 
 [data-theme='dark'] .json-key { color: #60a5fa; font-weight: 600; }
@@ -534,8 +533,37 @@ html, body {
 [data-theme='dark'] .json-number { color: #fbbf24; font-weight: 600; }
 [data-theme='dark'] .json-boolean { color: #c084fc; font-weight: 600; }
 [data-theme='dark'] .json-null { color: #f87171; font-weight: 600; }
-[data-theme='dark'] .json-bracket { color: #a78bfa; font-weight: 700; }
 [data-theme='dark'] .json-colon { color: #94a3b8; font-weight: 600; }
+
+/* Rainbow Brackets with High-Contrast Colors */
+.json-bracket {
+  font-weight: 800;
+  font-size: 1.1em;
+  padding: 0 1px;
+  border-radius: 3px;
+  transition: all var(--transition-fast);
+}
+
+.json-bracket:hover {
+  background-color: var(--accent-glow);
+  outline: 1px dashed currentColor;
+}
+
+[data-theme='light'] .json-bracket-d0 { color: #d97706; } /* Gold / Yellow */
+[data-theme='light'] .json-bracket-d1 { color: #dc2626; } /* Red */
+[data-theme='light'] .json-bracket-d2 { color: #2563eb; } /* Blue */
+[data-theme='light'] .json-bracket-d3 { color: #059669; } /* Green */
+[data-theme='light'] .json-bracket-d4 { color: #9333ea; } /* Purple */
+[data-theme='light'] .json-bracket-d5 { color: #db2777; } /* Pink */
+[data-theme='light'] .json-bracket-d6 { color: #ea580c; } /* Orange */
+
+[data-theme='dark'] .json-bracket-d0 { color: #fbbf24; } /* Bright Gold / Yellow */
+[data-theme='dark'] .json-bracket-d1 { color: #ef4444; } /* Bright Red */
+[data-theme='dark'] .json-bracket-d2 { color: #60a5fa; } /* Bright Blue */
+[data-theme='dark'] .json-bracket-d3 { color: #34d399; } /* Bright Green */
+[data-theme='dark'] .json-bracket-d4 { color: #c084fc; } /* Bright Purple */
+[data-theme='dark'] .json-bracket-d5 { color: #f472b6; } /* Bright Pink */
+[data-theme='dark'] .json-bracket-d6 { color: #fb923c; } /* Bright Orange */
 
 /* JSON Interactive Tree & Folding Styles */
 .json-tree-viewer-wrapper {

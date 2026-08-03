@@ -2,23 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, UnfoldVertical, FoldVertical } from 'lucide-react';
 
 const RAINBOW_BRACKET_COLORS_LIGHT = [
-  '#d97706', // Depth 0: Amber / Gold
-  '#9333ea', // Depth 1: Purple
+  '#d97706', // Depth 0: Gold / Yellow
+  '#dc2626', // Depth 1: Red
   '#2563eb', // Depth 2: Blue
-  '#059669', // Depth 3: Emerald
-  '#ea580c', // Depth 4: Orange
+  '#059669', // Depth 3: Green
+  '#9333ea', // Depth 4: Purple
   '#db2777', // Depth 5: Pink
-  '#0284c7', // Depth 6: Sky Blue
+  '#ea580c', // Depth 6: Orange
 ];
 
 const RAINBOW_BRACKET_COLORS_DARK = [
-  '#fbbf24', // Depth 0: Bright Gold
-  '#c084fc', // Depth 1: Bright Purple
+  '#fbbf24', // Depth 0: Bright Gold / Yellow
+  '#ef4444', // Depth 1: Bright Red
   '#60a5fa', // Depth 2: Bright Blue
-  '#34d399', // Depth 3: Bright Emerald
-  '#fb923c', // Depth 4: Bright Orange
+  '#34d399', // Depth 3: Bright Green
+  '#c084fc', // Depth 4: Bright Purple
   '#f472b6', // Depth 5: Bright Pink
-  '#38bdf8', // Depth 6: Bright Sky Blue
+  '#fb923c', // Depth 6: Bright Orange
 ];
 
 interface JsonTreeNodeProps {

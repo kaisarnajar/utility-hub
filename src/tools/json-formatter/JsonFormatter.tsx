@@ -25,6 +25,8 @@ function highlightJsonToHtml(json: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
+  let depth = 0;
+
   return htmlEscaped.replace(
     /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\{\}\[\]])/g,
     (match) => {
@@ -41,7 +43,16 @@ function highlightJsonToHtml(json: string): string {
       } else if (/null/.test(match)) {
         cls = 'json-null';
       } else if (/[\{\}\[\]]/.test(match)) {
-        return `<span class="json-bracket">${match}</span>`;
+        let currentDepth = depth;
+        if (match === '{' || match === '[') {
+          currentDepth = depth;
+          depth++;
+        } else if (match === '}' || match === ']') {
+          depth = Math.max(0, depth - 1);
+          currentDepth = depth;
+        }
+        const depthIdx = currentDepth % 7;
+        return `<span class="json-bracket json-bracket-d${depthIdx}">${match}</span>`;
       }
       return `<span class="${cls}">${match}</span>`;
     }
