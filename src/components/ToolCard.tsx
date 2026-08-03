@@ -11,8 +11,18 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool, onOpen }) => {
   const IconComponent = tool.icon;
   const isReady = tool.status === 'ready';
 
+  const handleCardClick = () => {
+    if (isReady) {
+      onOpen(tool);
+    }
+  };
+
   return (
-    <div className="tool-card">
+    <div
+      className={`tool-card ${isReady ? 'clickable' : ''}`}
+      onClick={handleCardClick}
+      style={{ cursor: isReady ? 'pointer' : 'default' }}
+    >
       <div>
         <div className="tool-card-header">
           <div className="tool-icon-wrapper">
@@ -33,7 +43,10 @@ export const ToolCard: React.FC<ToolCardProps> = ({ tool, onOpen }) => {
 
       <div className="tool-card-footer">
         <button
-          onClick={() => onOpen(tool)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isReady) onOpen(tool);
+          }}
           className={`open-tool-btn ${isReady ? '' : 'disabled'}`}
         >
           {isReady ? (
