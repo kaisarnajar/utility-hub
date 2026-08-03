@@ -18,14 +18,19 @@ const MODES: Record<Mode, ModeConfig> = {
 
 export const PomodoroTool: React.FC = () => {
   const [mode, setMode] = useState<Mode>('work');
-  const [workTime, setWorkTime] = useState<number>(25);
-  const [shortBreakTime, setShortBreakTime] = useState<number>(5);
-  const [longBreakTime, setLongBreakTime] = useState<number>(15);
+  const [workTime, setWorkTime] = useState<number | string>(25);
+  const [shortBreakTime, setShortBreakTime] = useState<number | string>(5);
+  const [longBreakTime, setLongBreakTime] = useState<number | string>(15);
+
+  const getSanitizedMinutes = (val: number | string, fallback: number): number => {
+    if (val === '') return fallback;
+    const parsed = typeof val === 'number' ? val : parseInt(val, 10);
+    return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+  };
 
   const [timeLeft, setTimeLeft] = useState<number>(25 * 60);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [completedSessions, setCompletedSessions] = useState<number>(0);
-  const [currentTask, setCurrentTask] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
@@ -119,9 +124,9 @@ export const PomodoroTool: React.FC = () => {
   // Sync initial mode duration when idle
   useEffect(() => {
     if (!isRunning) {
-      if (mode === 'work') setTimeLeft(workTime * 60);
-      else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
-      else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+      if (mode === 'work') setTimeLeft(getSanitizedMinutes(workTime, 25) * 60);
+      else if (mode === 'shortBreak') setTimeLeft(getSanitizedMinutes(shortBreakTime, 5) * 60);
+      else if (mode === 'longBreak') setTimeLeft(getSanitizedMinutes(longBreakTime, 15) * 60);
     }
   }, [mode, workTime, shortBreakTime, longBreakTime, isRunning]);
 
@@ -183,9 +188,9 @@ export const PomodoroTool: React.FC = () => {
   const handleReset = () => {
     setIsRunning(false);
     targetEndTimeRef.current = null;
-    if (mode === 'work') setTimeLeft(workTime * 60);
-    else if (mode === 'shortBreak') setTimeLeft(shortBreakTime * 60);
-    else if (mode === 'longBreak') setTimeLeft(longBreakTime * 60);
+    if (mode === 'work') setTimeLeft(getSanitizedMinutes(workTime, 25) * 60);
+    else if (mode === 'shortBreak') setTimeLeft(getSanitizedMinutes(shortBreakTime, 5) * 60);
+    else if (mode === 'longBreak') setTimeLeft(getSanitizedMinutes(longBreakTime, 15) * 60);
   };
 
   const handleSkip = () => {
@@ -196,8 +201,12 @@ export const PomodoroTool: React.FC = () => {
   };
 
   const totalModeDuration =
-    mode === 'work' ? workTime * 60 : mode === 'shortBreak' ? shortBreakTime * 60 : longBreakTime * 60;
-  const progressPercent = Math.min(100, Math.max(0, ((totalModeDuration - timeLeft) / totalModeDuration) * 100));
+    (mode === 'work'
+      ? getSanitizedMinutes(workTime, 25)
+      : mode === 'shortBreak'
+      ? getSanitizedMinutes(shortBreakTime, 5)
+      : getSanitizedMinutes(longBreakTime, 15)) * 60;
+  const progressPercent = Math.min(100, Math.max(0, ((totalModeDuration - timeLeft) / (totalModeDuration || 1)) * 100));
 
   return (
     <div className="tool-container" style={{ maxWidth: '520px', margin: '0 auto' }}>
@@ -239,18 +248,6 @@ export const PomodoroTool: React.FC = () => {
         ))}
       </div>
 
-      {/* Task Input */}
-      <div style={{ textAlign: 'center' }}>
-        <input
-          type="text"
-          placeholder="What task are you focusing on?"
-          value={currentTask}
-          onChange={(e) => setCurrentTask(e.target.value)}
-          className="tool-input-field"
-          style={{ textAlign: 'center', width: '100%' }}
-        />
-      </div>
-
       {/* Timer Circle */}
       <div
         style={{
@@ -280,7 +277,7 @@ export const PomodoroTool: React.FC = () => {
             strokeWidth="10"
             fill="transparent"
             strokeDasharray={2 * Math.PI * 110}
-            strokeDashoffset={(2 * Math.PI * 110 * (100 - progressPercent)) / 100}
+            strokeDashoffset={(2 * Math.PI * 110 * (100 - (isNaN(progressPercent) ? 0 : progressPercent))) / 100}
             strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.3s ease' }}
           />
@@ -377,7 +374,6 @@ export const PomodoroTool: React.FC = () => {
           marginTop: '0.5rem',
         }}
       >
-
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="btn-secondary"
@@ -407,7 +403,20 @@ export const PomodoroTool: React.FC = () => {
               min="1"
               max="90"
               value={workTime}
-              onChange={(e) => setWorkTime(Math.max(1, parseInt(e.target.value) || 1))}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setWorkTime('');
+                } else {
+                  const parsed = parseInt(val, 10);
+                  setWorkTime(isNaN(parsed) ? '' : parsed);
+                }
+              }}
+              onBlur={() => {
+                if (workTime === '' || Number(workTime) < 1) {
+                  setWorkTime(25);
+                }
+              }}
               className="tool-input-field"
             />
           </div>
@@ -419,7 +428,20 @@ export const PomodoroTool: React.FC = () => {
               min="1"
               max="30"
               value={shortBreakTime}
-              onChange={(e) => setShortBreakTime(Math.max(1, parseInt(e.target.value) || 1))}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setShortBreakTime('');
+                } else {
+                  const parsed = parseInt(val, 10);
+                  setShortBreakTime(isNaN(parsed) ? '' : parsed);
+                }
+              }}
+              onBlur={() => {
+                if (shortBreakTime === '' || Number(shortBreakTime) < 1) {
+                  setShortBreakTime(5);
+                }
+              }}
               className="tool-input-field"
             />
           </div>
@@ -431,7 +453,20 @@ export const PomodoroTool: React.FC = () => {
               min="1"
               max="60"
               value={longBreakTime}
-              onChange={(e) => setLongBreakTime(Math.max(1, parseInt(e.target.value) || 1))}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setLongBreakTime('');
+                } else {
+                  const parsed = parseInt(val, 10);
+                  setLongBreakTime(isNaN(parsed) ? '' : parsed);
+                }
+              }}
+              onBlur={() => {
+                if (longBreakTime === '' || Number(longBreakTime) < 1) {
+                  setLongBreakTime(15);
+                }
+              }}
               className="tool-input-field"
             />
           </div>
