@@ -44,48 +44,114 @@ export const TwitterDownloaderTool: React.FC = () => {
     setLoading(true);
 
     try {
-      // Primary: Twitter syndication API
-      const res = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=x`);
-      if (!res.ok) throw new Error('Could not fetch Twitter post data directly.');
+      // Primary API: FxTwitter API (Handles all video formats, amplified media & URLs with /video/1)
+      const fxRes = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
+      if (fxRes.ok) {
+        const fxData = await fxRes.json();
+        if (fxData.code === 200 && fxData.tweet) {
+          const tweet = fxData.tweet;
+          const mediaItems: TwitterMedia[] = [];
 
-      const data = await res.json();
-      const mediaItems: TwitterMedia[] = [];
+          if (tweet.media) {
+            // Check video items
+            if (tweet.media.videos && Array.isArray(tweet.media.videos)) {
+              tweet.media.videos.forEach((v: any) => {
+                const variants = (v.variants || v.formats || [])
+                  .filter((item: any) => item.content_type === 'video/mp4' || item.container === 'mp4')
+                  .map((item: any) => ({
+                    bitrate: item.bitrate || 1000000,
+                    content_type: 'video/mp4',
+                    url: item.url,
+                  }))
+                  .sort((a: any, b: any) => b.bitrate - a.bitrate);
 
-      if (data.mediaDetails && Array.isArray(data.mediaDetails)) {
-        data.mediaDetails.forEach((item: any) => {
-          if (item.type === 'video' || item.type === 'animated_gif') {
-            const variants = item.video_info?.variants || [];
-            const mp4Variants = variants
-              .filter((v: any) => v.content_type === 'video/mp4')
-              .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+                if (variants.length === 0 && v.url) {
+                  variants.push({ bitrate: 1000000, content_type: 'video/mp4', url: v.url });
+                }
 
-            mediaItems.push({
-              type: item.type,
-              previewUrl: item.media_url_https,
-              variants: mp4Variants,
-            });
-          } else if (item.type === 'photo') {
-            mediaItems.push({
-              type: 'photo',
-              previewUrl: item.media_url_https,
-              photoUrl: item.media_url_https,
-            });
+                mediaItems.push({
+                  type: 'video',
+                  previewUrl: v.thumbnail_url || v.url,
+                  variants,
+                });
+              });
+            }
+
+            // Check photo items
+            if (tweet.media.photos && Array.isArray(tweet.media.photos)) {
+              tweet.media.photos.forEach((p: any) => {
+                const pUrl = p.url || p;
+                mediaItems.push({
+                  type: 'photo',
+                  previewUrl: pUrl,
+                  photoUrl: pUrl,
+                });
+              });
+            }
           }
+
+          setTweetData({
+            id: tweetId,
+            text: tweet.text || 'Twitter / X Post',
+            authorName: tweet.author?.name || 'X User',
+            authorHandle: `@${tweet.author?.screen_name || 'user'}`,
+            avatarUrl: tweet.author?.avatar_url || '',
+            media: mediaItems,
+          });
+
+          if (mediaItems.length === 0) {
+            setError('This Twitter post does not contain any video or image media files.');
+          }
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Secondary Fallback API: Twitter Syndication
+      const synRes = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&token=x`);
+      if (synRes.ok) {
+        const data = await synRes.json();
+        const mediaItems: TwitterMedia[] = [];
+
+        if (data.mediaDetails && Array.isArray(data.mediaDetails)) {
+          data.mediaDetails.forEach((item: any) => {
+            if (item.type === 'video' || item.type === 'animated_gif') {
+              const mp4Variants = (item.video_info?.variants || [])
+                .filter((v: any) => v.content_type === 'video/mp4')
+                .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+
+              mediaItems.push({
+                type: item.type,
+                previewUrl: item.media_url_https,
+                variants: mp4Variants,
+              });
+            } else if (item.type === 'photo') {
+              mediaItems.push({
+                type: 'photo',
+                previewUrl: item.media_url_https,
+                photoUrl: item.media_url_https,
+              });
+            }
+          });
+        }
+
+        setTweetData({
+          id: tweetId,
+          text: data.text || 'Twitter / X Post',
+          authorName: data.user?.name || 'X User',
+          authorHandle: `@${data.user?.screen_name || 'user'}`,
+          avatarUrl: data.user?.profile_image_url_https || '',
+          media: mediaItems,
         });
+
+        if (mediaItems.length === 0) {
+          setError('This Twitter post does not contain any video or image media files.');
+        }
+        setLoading(false);
+        return;
       }
 
-      setTweetData({
-        id: tweetId,
-        text: data.text || 'Twitter / X Post',
-        authorName: data.user?.name || 'X User',
-        authorHandle: `@${data.user?.screen_name || 'user'}`,
-        avatarUrl: data.user?.profile_image_url_https || '',
-        media: mediaItems,
-      });
-
-      if (mediaItems.length === 0) {
-        setError('This Twitter post does not contain any video or image media files.');
-      }
+      throw new Error('Unable to fetch post media. Please check the URL and try again.');
     } catch (err: any) {
       setError(err.message || 'Failed to parse Twitter media.');
       setTweetData(null);
