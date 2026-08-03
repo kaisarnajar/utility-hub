@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, CheckCircle, Settings, Bell } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, CheckCircle, Settings, Bell, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 type Mode = 'work' | 'shortBreak' | 'longBreak';
@@ -44,6 +44,17 @@ export const PomodoroTool: React.FC = () => {
       Notification.requestPermission();
     }
   }, []);
+
+  // Close settings popup modal on ESC key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showSettings) {
+        setShowSettings(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSettings]);
 
   // Web Audio API sound chime
   const playAlertSound = useCallback(() => {
@@ -397,92 +408,172 @@ export const PomodoroTool: React.FC = () => {
         </button>
       </div>
 
-      {/* Custom Time Settings Panel */}
+      {/* Custom Time Settings PopUp Modal */}
       {showSettings && (
         <div
+          className="settings-modal-overlay"
+          onClick={() => setShowSettings(false)}
           style={{
-            backgroundColor: 'var(--bg-subtle)',
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             padding: '1rem',
-            borderRadius: 'var(--radius-md)',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '0.75rem',
-            marginTop: '0.5rem',
+            animation: 'fadeIn 0.2s ease',
           }}
         >
-          <div className="tool-input-group">
-            <label className="tool-label">Focus (min)</label>
-            <input
-              type="number"
-              min="1"
-              max="90"
-              value={workTime}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === '') {
-                  setWorkTime('');
-                } else {
-                  const parsed = parseInt(val, 10);
-                  setWorkTime(isNaN(parsed) ? '' : parsed);
-                }
+          <div
+            className="settings-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-xl)',
+              width: '100%',
+              maxWidth: '460px',
+              padding: '1.75rem',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.25rem',
+              animation: 'slideUp 0.2s ease',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.85rem',
               }}
-              onBlur={() => {
-                if (workTime === '' || Number(workTime) < 1) {
-                  setWorkTime(25);
-                }
-              }}
-              className="tool-input-field"
-            />
-          </div>
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Settings size={20} color="var(--accent-primary)" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  Pomodoro Timer Settings
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="btn-secondary"
+                style={{ padding: '0.35rem', borderRadius: 'var(--radius-md)' }}
+                title="Close Settings"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-          <div className="tool-input-group">
-            <label className="tool-label">Short (min)</label>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              value={shortBreakTime}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === '') {
-                  setShortBreakTime('');
-                } else {
-                  const parsed = parseInt(val, 10);
-                  setShortBreakTime(isNaN(parsed) ? '' : parsed);
-                }
+            {/* Modal Body: Duration Controls */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.85rem',
               }}
-              onBlur={() => {
-                if (shortBreakTime === '' || Number(shortBreakTime) < 1) {
-                  setShortBreakTime(5);
-                }
-              }}
-              className="tool-input-field"
-            />
-          </div>
+            >
+              <div className="tool-input-group">
+                <label className="tool-label">Focus (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={workTime}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setWorkTime('');
+                    } else {
+                      const parsed = parseInt(val, 10);
+                      setWorkTime(isNaN(parsed) ? '' : parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (workTime === '' || Number(workTime) < 1) {
+                      setWorkTime(25);
+                    }
+                  }}
+                  className="tool-input-field"
+                  style={{ textAlign: 'center' }}
+                />
+              </div>
 
-          <div className="tool-input-group">
-            <label className="tool-label">Long (min)</label>
-            <input
-              type="number"
-              min="1"
-              max="60"
-              value={longBreakTime}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === '') {
-                  setLongBreakTime('');
-                } else {
-                  const parsed = parseInt(val, 10);
-                  setLongBreakTime(isNaN(parsed) ? '' : parsed);
-                }
+              <div className="tool-input-group">
+                <label className="tool-label">Short (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={shortBreakTime}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setShortBreakTime('');
+                    } else {
+                      const parsed = parseInt(val, 10);
+                      setShortBreakTime(isNaN(parsed) ? '' : parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (shortBreakTime === '' || Number(shortBreakTime) < 1) {
+                      setShortBreakTime(5);
+                    }
+                  }}
+                  className="tool-input-field"
+                  style={{ textAlign: 'center' }}
+                />
+              </div>
+
+              <div className="tool-input-group">
+                <label className="tool-label">Long (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={longBreakTime}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setLongBreakTime('');
+                    } else {
+                      const parsed = parseInt(val, 10);
+                      setLongBreakTime(isNaN(parsed) ? '' : parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (longBreakTime === '' || Number(longBreakTime) < 1) {
+                      setLongBreakTime(15);
+                    }
+                  }}
+                  className="tool-input-field"
+                  style={{ textAlign: 'center' }}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingTop: '0.75rem',
+                borderTop: '1px solid var(--border-color)',
               }}
-              onBlur={() => {
-                if (longBreakTime === '' || Number(longBreakTime) < 1) {
-                  setLongBreakTime(15);
-                }
-              }}
-              className="tool-input-field"
-            />
+            >
+              <button
+                onClick={() => setShowSettings(false)}
+                className="btn-primary"
+                style={{ padding: '0.55rem 1.25rem', fontSize: '0.9rem' }}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
