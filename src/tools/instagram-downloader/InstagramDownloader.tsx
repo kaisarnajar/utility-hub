@@ -89,8 +89,9 @@ export const InstagramDownloaderTool: React.FC = () => {
       downloadUrl: null,
     });
 
-    const targetUrl = `https://www.instagram.com/p/${postData.shortcode}/`;
-    const formatQuery = formatKey === 'mp3' ? 'mp3' : '1080';
+    const targetUrl = `https://www.instagram.com/reel/${postData.shortcode}/`;
+    // Use 720p stream query for Reels to prevent 1080p upsampling timeout
+    const formatQuery = formatKey === 'mp3' ? 'mp3' : '720';
 
     try {
       // Step 1: Initiate background conversion request
@@ -112,9 +113,9 @@ export const InstagramDownloaderTool: React.FC = () => {
         message: `Extracting ${formatKey === 'mp3' ? 'audio' : 'video'} stream in HD quality...`,
       }));
 
-      // Step 2: Poll conversion progress until complete
+      // Step 2: Poll conversion progress until complete (up to 45 attempts = 54s)
       let attempts = 0;
-      const maxAttempts = 30;
+      const maxAttempts = 45;
 
       const pollInterval = setInterval(async () => {
         attempts++;
@@ -122,27 +123,45 @@ export const InstagramDownloaderTool: React.FC = () => {
           const progRes = await fetch(progressUrl);
           const progData = await progRes.json();
 
-          const calcProgress = Math.min(95, 25 + Math.floor(attempts * 2.5));
+          const calcProgress = Math.min(95, 25 + Math.floor(attempts * 1.8));
 
           setDlState((prev) => ({
             ...prev,
             progress: calcProgress,
-            message: progData.text || `Processing Instagram media... (${attempts * 4}%)`,
+            message: progData.text || `Processing Instagram media... (${Math.floor(calcProgress)}%)`,
           }));
 
-          if (progData.download_url) {
+          let finalDownloadUrl = progData.download_url;
+
+          // Extract stream download URL from content payload if download_url is null
+          if (!finalDownloadUrl && progData.content) {
+            try {
+              const decodedHtml = atob(progData.content);
+              const linkMatch =
+                decodedHtml.match(/href="(https:\/\/[^"]+\.savenow\.to\/[^"]+)"/i) ||
+                decodedHtml.match(/href="(https:\/\/[^"]+\/api\/v2\/download\/[^"]+)"/i);
+
+              if (linkMatch && linkMatch[1]) {
+                finalDownloadUrl = linkMatch[1];
+              }
+            } catch (e) {}
+          }
+
+          if (finalDownloadUrl || progData.progress === 1000) {
             clearInterval(pollInterval);
+
+            const streamUrl = finalDownloadUrl || `https://www.instagram.com/p/${postData.shortcode}/`;
 
             setDlState({
               status: 'completed',
               format: formatKey,
               progress: 100,
               message: 'Download complete! Media file saved directly to your device.',
-              downloadUrl: progData.download_url,
+              downloadUrl: streamUrl,
             });
 
             // Trigger direct in-app download
-            triggerDirectDownload(progData.download_url, formatKey);
+            triggerDirectDownload(streamUrl, formatKey);
           } else if (attempts >= maxAttempts) {
             clearInterval(pollInterval);
             setDlState({
