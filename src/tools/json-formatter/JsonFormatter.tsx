@@ -47,11 +47,57 @@ function highlightJsonToHtml(json: string): string {
   );
 }
 
+function tryFixMissingBrackets(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const stack: string[] = [];
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (inString) {
+      if (char === '\\' && !isEscaped) {
+        isEscaped = true;
+      } else {
+        if (char === '"' && !isEscaped) {
+          inString = false;
+        }
+        isEscaped = false;
+      }
+    } else {
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{') {
+        stack.push('}');
+      } else if (char === '[') {
+        stack.push(']');
+      } else if (char === '}' || char === ']') {
+        if (stack.length > 0 && stack[stack.length - 1] === char) {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  if (stack.length > 0 && !inString) {
+    const candidate = trimmed + stack.reverse().join('');
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
 export const JsonFormatterTool: React.FC = () => {
   const [inputJson, setInputJson] = useState<string>(SAMPLE_JSON);
   const [formattedJson, setFormattedJson] = useState<string>('');
   const [indent, setIndent] = useState<number>(2);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fixableJson, setFixableJson] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
   const formatJson = (spaces: number = indent, customInput?: string) => {
@@ -59,13 +105,17 @@ export const JsonFormatterTool: React.FC = () => {
     const textToParse = customInput !== undefined ? customInput : inputJson;
     if (!textToParse.trim()) {
       setFormattedJson('');
+      setFixableJson(null);
       return;
     }
     try {
       const parsed = JSON.parse(textToParse);
       setFormattedJson(JSON.stringify(parsed, null, spaces));
+      setFixableJson(null);
     } catch (err: any) {
       setErrorMsg(err.message || 'Invalid JSON format');
+      const fixed = tryFixMissingBrackets(textToParse);
+      setFixableJson(fixed);
     }
   };
 
@@ -77,13 +127,17 @@ export const JsonFormatterTool: React.FC = () => {
     setErrorMsg(null);
     if (!inputJson.trim()) {
       setFormattedJson('');
+      setFixableJson(null);
       return;
     }
     try {
       const parsed = JSON.parse(inputJson);
       setFormattedJson(JSON.stringify(parsed));
+      setFixableJson(null);
     } catch (err: any) {
       setErrorMsg(err.message || 'Invalid JSON format');
+      const fixed = tryFixMissingBrackets(inputJson);
+      setFixableJson(fixed);
     }
   };
 
@@ -111,6 +165,7 @@ export const JsonFormatterTool: React.FC = () => {
     setInputJson('');
     setFormattedJson('');
     setErrorMsg(null);
+    setFixableJson(null);
   };
 
   return (
@@ -188,16 +243,37 @@ export const JsonFormatterTool: React.FC = () => {
             backgroundColor: 'rgba(239, 68, 68, 0.12)',
             color: '#ef4444',
             border: '1px solid rgba(239, 68, 68, 0.3)',
-            padding: '0.75rem 1rem',
+            padding: '0.85rem 1.25rem',
             borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
             fontSize: '0.9rem',
           }}
         >
-          <AlertCircle size={18} />
-          <span><strong>JSON Syntax Error:</strong> {errorMsg}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertCircle size={18} />
+            <span><strong>JSON Syntax Error:</strong> {errorMsg}</span>
+          </div>
+
+          {fixableJson && (
+            <button
+              onClick={() => {
+                setInputJson(fixableJson);
+                formatJson(indent, fixableJson);
+              }}
+              className="btn-primary"
+              style={{
+                backgroundColor: '#ef4444',
+                padding: '0.35rem 0.85rem',
+                fontSize: '0.8rem',
+              }}
+            >
+              Auto-Fix Missing Closing Brackets
+            </button>
+          )}
         </div>
       )}
 
