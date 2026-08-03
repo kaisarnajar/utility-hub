@@ -6,24 +6,15 @@ import { useTheme } from '../../context/ThemeContext';
 export const QRCodeTool: React.FC = () => {
   const { theme } = useTheme();
   const [text, setText] = useState<string>('https://github.com');
-  const [darkColor, setDarkColor] = useState<string>(theme === 'dark' ? '#ffffff' : '#000000');
-  const [lightColor, setLightColor] = useState<string>(theme === 'dark' ? '#141c2e' : '#ffffff');
   const [errorCorrectionLevel, setErrorCorrectionLevel] = useState<'L' | 'M' | 'Q' | 'H'>('M');
   const [size, setSize] = useState<number>(256);
 
   const [copied, setCopied] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Auto select foreground & background color matching current active theme (light / dark)
-  useEffect(() => {
-    if (theme === 'dark') {
-      setDarkColor('#ffffff');
-      setLightColor('#141c2e');
-    } else {
-      setDarkColor('#000000');
-      setLightColor('#ffffff');
-    }
-  }, [theme]);
+  // Auto select foreground & background colors matching active theme mode
+  const darkColor = theme === 'dark' ? '#ffffff' : '#000000';
+  const lightColor = theme === 'dark' ? '#141c2e' : '#ffffff';
 
   useEffect(() => {
     if (canvasRef.current && text.trim().length > 0) {
@@ -125,7 +116,7 @@ export const QRCodeTool: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
             gap: '1rem',
             backgroundColor: 'var(--bg-card)',
             padding: '1.25rem',
@@ -133,26 +124,6 @@ export const QRCodeTool: React.FC = () => {
             border: '1px solid var(--border-color)',
           }}
         >
-          <div className="tool-input-group">
-            <label className="tool-label">Foreground Color</label>
-            <input
-              type="color"
-              value={darkColor}
-              onChange={(e) => setDarkColor(e.target.value)}
-              style={{ width: '100%', height: '40px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: '1px solid var(--border-color)' }}
-            />
-          </div>
-
-          <div className="tool-input-group">
-            <label className="tool-label">Background Color</label>
-            <input
-              type="color"
-              value={lightColor}
-              onChange={(e) => setLightColor(e.target.value)}
-              style={{ width: '100%', height: '40px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: '1px solid var(--border-color)' }}
-            />
-          </div>
-
           <div className="tool-input-group">
             <label className="tool-label">Error Correction</label>
             <select
