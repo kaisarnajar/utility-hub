@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Download, Trash2, Check, AlertCircle, FileCode, Code } from 'lucide-react';
+import { Copy, Download, Trash2, Check, AlertCircle, FileCode, Code, Layers } from 'lucide-react';
+import { JsonTreeViewer } from './JsonTreeViewer';
 
 const SAMPLE_JSON = `{
   "name": "Utility Hub",
@@ -95,6 +96,9 @@ function tryFixMissingBrackets(raw: string): string | null {
 export const JsonFormatterTool: React.FC = () => {
   const [inputJson, setInputJson] = useState<string>(SAMPLE_JSON);
   const [formattedJson, setFormattedJson] = useState<string>('');
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'tree' | 'text'>('tree');
+
   const [indent, setIndent] = useState<number>(2);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fixableJson, setFixableJson] = useState<string | null>(null);
@@ -105,14 +109,17 @@ export const JsonFormatterTool: React.FC = () => {
     const textToParse = customInput !== undefined ? customInput : inputJson;
     if (!textToParse.trim()) {
       setFormattedJson('');
+      setParsedData(null);
       setFixableJson(null);
       return;
     }
     try {
       const parsed = JSON.parse(textToParse);
+      setParsedData(parsed);
       setFormattedJson(JSON.stringify(parsed, null, spaces));
       setFixableJson(null);
     } catch (err: any) {
+      setParsedData(null);
       setErrorMsg(err.message || 'Invalid JSON format');
       const fixed = tryFixMissingBrackets(textToParse);
       setFixableJson(fixed);
@@ -127,14 +134,17 @@ export const JsonFormatterTool: React.FC = () => {
     setErrorMsg(null);
     if (!inputJson.trim()) {
       setFormattedJson('');
+      setParsedData(null);
       setFixableJson(null);
       return;
     }
     try {
       const parsed = JSON.parse(inputJson);
+      setParsedData(parsed);
       setFormattedJson(JSON.stringify(parsed));
       setFixableJson(null);
     } catch (err: any) {
+      setParsedData(null);
       setErrorMsg(err.message || 'Invalid JSON format');
       const fixed = tryFixMissingBrackets(inputJson);
       setFixableJson(fixed);
@@ -164,6 +174,7 @@ export const JsonFormatterTool: React.FC = () => {
   const handleClear = () => {
     setInputJson('');
     setFormattedJson('');
+    setParsedData(null);
     setErrorMsg(null);
     setFixableJson(null);
   };
@@ -297,15 +308,38 @@ export const JsonFormatterTool: React.FC = () => {
         </div>
 
         <div className="tool-input-group">
-          <label className="tool-label">Formatted & Colorized Output</label>
-          {formattedJson ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+            <label className="tool-label">Formatted Output</label>
+            {parsedData !== null && (
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                <button
+                  onClick={() => setViewMode('tree')}
+                  className={`filter-btn ${viewMode === 'tree' ? 'active' : ''}`}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                >
+                  <Layers size={13} style={{ marginRight: '3px' }} /> Rainbow Tree & Folding
+                </button>
+                <button
+                  onClick={() => setViewMode('text')}
+                  className={`filter-btn ${viewMode === 'text' ? 'active' : ''}`}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                >
+                  Code
+                </button>
+              </div>
+            )}
+          </div>
+
+          {parsedData !== null && viewMode === 'tree' ? (
+            <JsonTreeViewer parsedData={parsedData} />
+          ) : formattedJson ? (
             <pre
               className="json-highlight-container"
               dangerouslySetInnerHTML={{ __html: highlightJsonToHtml(formattedJson) }}
             />
           ) : (
             <div className="json-highlight-container" style={{ color: 'var(--text-muted)' }}>
-              Formatted result with color highlighting will appear here...
+              Formatted result with color highlighting & folding will appear here...
             </div>
           )}
         </div>
