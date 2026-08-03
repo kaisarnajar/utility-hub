@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Youtube, Download, Image, Play, Check, AlertCircle, ExternalLink, Loader2, Sparkles } from 'lucide-react';
+import { Youtube, Download, Image, Check, AlertCircle, Loader2, RefreshCw, FileVideo, Music } from 'lucide-react';
 
 interface YoutubeVideoInfo {
   videoId: string;
@@ -9,12 +9,27 @@ interface YoutubeVideoInfo {
   thumbnails: { quality: string; resolution: string; url: string }[];
 }
 
+interface DownloadProgressState {
+  status: 'idle' | 'converting' | 'downloading' | 'completed' | 'error';
+  format: string | null;
+  progress: number;
+  message: string;
+  downloadUrl: string | null;
+}
+
 export const YoutubeDownloaderTool: React.FC = () => {
   const [url, setUrl] = useState<string>('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
   const [loading, setLoading] = useState<boolean>(false);
   const [videoInfo, setVideoInfo] = useState<YoutubeVideoInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
+
+  const [dlState, setDlState] = useState<DownloadProgressState>({
+    status: 'idle',
+    format: null,
+    progress: 0,
+    message: '',
+    downloadUrl: null,
+  });
 
   const extractVideoId = (inputUrl: string): string | null => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
@@ -24,6 +39,8 @@ export const YoutubeDownloaderTool: React.FC = () => {
 
   const handleParse = async () => {
     setError(null);
+    setDlState({ status: 'idle', format: null, progress: 0, message: '', downloadUrl: null });
+
     const videoId = extractVideoId(url.trim());
     if (!videoId) {
       setError('Please enter a valid YouTube video or Shorts URL.');
@@ -53,7 +70,6 @@ export const YoutubeDownloaderTool: React.FC = () => {
 
       setVideoInfo(info);
     } catch (err) {
-      // Fallback info if noembed network request fails
       setVideoInfo({
         videoId,
         title: 'YouTube Video',
@@ -79,33 +95,132 @@ export const YoutubeDownloaderTool: React.FC = () => {
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (e) {
-      window.open(imgUrl, '_blank');
+      const link = document.createElement('a');
+      link.href = imgUrl;
+      link.download = `thumbnail-${quality}.jpg`;
+      link.target = '_blank';
+      link.click();
     }
   };
 
-  const handleDownloadMedia = (format: 'mp4-1080' | 'mp4-720' | 'mp3') => {
+  const triggerDirectDownload = (downloadUrl: string, formatKey: string) => {
+    const ext = formatKey === 'mp3' ? 'mp3' : formatKey === 'm4a' ? 'm4a' : 'mp4';
+    const safeTitle = (videoInfo?.title || 'youtube-video').replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `${safeTitle}_${formatKey}.${ext}`;
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleInAppDownload = async (formatKey: '1080' | '720' | '360' | 'mp3' | 'm4a') => {
     if (!videoInfo) return;
-    setDownloadingFormat(format);
-    
-    // Privacy-friendly web service redirect link for media extraction
+
+    setDlState({
+      status: 'converting',
+      format: formatKey,
+      progress: 10,
+      message: 'Connecting to media stream processor...',
+      downloadUrl: null,
+    });
+
     const targetUrl = `https://www.youtube.com/watch?v=${videoInfo.videoId}`;
-    let downloadServiceUrl = '';
 
-    if (format === 'mp3') {
-      downloadServiceUrl = `https://ytmp3.cc/en/?url=${encodeURIComponent(targetUrl)}`;
-    } else {
-      downloadServiceUrl = `https://y2mate.is/en/?url=${encodeURIComponent(targetUrl)}`;
+    try {
+      // Step 1: Initiate background conversion request
+      const initRes = await fetch(
+        `https://loader.to/ajax/download.php?format=${formatKey}&url=${encodeURIComponent(targetUrl)}`
+      );
+      const initData = await initRes.json();
+
+      if (!initData || (!initData.progress_url && !initData.id)) {
+        throw new Error('Conversion service did not respond with a stream queue ID.');
+      }
+
+      const progressUrl =
+        initData.progress_url || `https://lto2.affadaffa.com/api/progress?id=${initData.id}`;
+
+      setDlState((prev) => ({
+        ...prev,
+        progress: 25,
+        message: 'Converting video/audio stream in high quality...',
+      }));
+
+      // Step 2: Poll conversion progress until complete
+      let attempts = 0;
+      const maxAttempts = 30;
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const progRes = await fetch(progressUrl);
+          const progData = await progRes.json();
+
+          const calcProgress = Math.min(95, 25 + Math.floor(attempts * 2.5));
+
+          setDlState((prev) => ({
+            ...prev,
+            progress: calcProgress,
+            message: progData.text || `Processing stream... (${attempts * 4}%)`,
+          }));
+
+          if (progData.download_url) {
+            clearInterval(pollInterval);
+
+            setDlState({
+              status: 'completed',
+              format: formatKey,
+              progress: 100,
+              message: 'Download complete! File saved directly to your device.',
+              downloadUrl: progData.download_url,
+            });
+
+            // Trigger direct in-app download
+            triggerDirectDownload(progData.download_url, formatKey);
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setDlState({
+              status: 'error',
+              format: formatKey,
+              progress: 0,
+              message: 'Conversion timed out. Please try again or pick another format.',
+              downloadUrl: null,
+            });
+          }
+        } catch (pollErr) {
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setDlState({
+              status: 'error',
+              format: formatKey,
+              progress: 0,
+              message: 'Failed to poll stream progress.',
+              downloadUrl: null,
+            });
+          }
+        }
+      }, 1200);
+    } catch (err: any) {
+      setDlState({
+        status: 'error',
+        format: formatKey,
+        progress: 0,
+        message: err.message || 'Stream processing failed.',
+        downloadUrl: null,
+      });
     }
-
-    window.open(downloadServiceUrl, '_blank');
-    setTimeout(() => setDownloadingFormat(null), 1500);
   };
 
   return (
-    <div className="tool-container" style={{ maxWidth: '780px', margin: '0 auto' }}>
+    <div className="tool-container" style={{ maxWidth: '820px', margin: '0 auto' }}>
       {/* Input Group */}
       <div className="tool-input-group">
-        <label className="tool-label">YouTube Video / Shorts Link</label>
+        <label className="tool-label">YouTube Video or Shorts Link</label>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <input
             type="text"
@@ -156,7 +271,7 @@ export const YoutubeDownloaderTool: React.FC = () => {
               gap: '1.5rem',
             }}
           >
-            {/* Embedded Player / Thumbnail */}
+            {/* Embedded Player */}
             <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: '#000', position: 'relative' }}>
               <iframe
                 width="100%"
@@ -170,7 +285,7 @@ export const YoutubeDownloaderTool: React.FC = () => {
               />
             </div>
 
-            {/* Title, Details & Video/Audio Options */}
+            {/* Title, Details & In-App Direct Download Options */}
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -181,31 +296,120 @@ export const YoutubeDownloaderTool: React.FC = () => {
                 </h3>
               </div>
 
-              {/* Download Buttons */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {/* In-App Media Downloader Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  Download Video & Audio Streams:
+                  Download Directly In-App (No Redirects):
                 </span>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
                   <button
-                    onClick={() => handleDownloadMedia('mp4-1080')}
+                    onClick={() => handleInAppDownload('1080')}
+                    disabled={dlState.status === 'converting'}
                     className="btn-primary"
-                    style={{ flex: 1, padding: '0.6rem 0.85rem', fontSize: '0.85rem' }}
+                    style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', justifyContent: 'center' }}
                   >
-                    <Download size={16} /> MP4 (HD Video)
+                    <FileVideo size={15} /> MP4 (1080p HD)
                   </button>
 
                   <button
-                    onClick={() => handleDownloadMedia('mp3')}
+                    onClick={() => handleInAppDownload('720')}
+                    disabled={dlState.status === 'converting'}
                     className="btn-secondary"
-                    style={{ flex: 1, padding: '0.6rem 0.85rem', fontSize: '0.85rem' }}
+                    style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', justifyContent: 'center' }}
                   >
-                    <Download size={16} /> MP3 Audio
+                    <FileVideo size={15} /> MP4 (720p HD)
+                  </button>
+
+                  <button
+                    onClick={() => handleInAppDownload('mp3')}
+                    disabled={dlState.status === 'converting'}
+                    className="btn-secondary"
+                    style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', justifyContent: 'center' }}
+                  >
+                    <Music size={15} /> MP3 Audio
+                  </button>
+
+                  <button
+                    onClick={() => handleInAppDownload('m4a')}
+                    disabled={dlState.status === 'converting'}
+                    className="btn-secondary"
+                    style={{ padding: '0.55rem 0.75rem', fontSize: '0.82rem', justifyContent: 'center' }}
+                  >
+                    <Music size={15} /> M4A Audio
                   </button>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Active In-App Conversion Progress Banner */}
+          {dlState.status !== 'idle' && (
+            <div
+              style={{
+                backgroundColor:
+                  dlState.status === 'error'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : dlState.status === 'completed'
+                    ? 'rgba(16, 185, 129, 0.1)'
+                    : 'var(--bg-card)',
+                borderRadius: 'var(--radius-lg)',
+                border: `1px solid ${
+                  dlState.status === 'error'
+                    ? 'rgba(239, 68, 68, 0.3)'
+                    : dlState.status === 'completed'
+                    ? 'rgba(16, 185, 129, 0.3)'
+                    : 'var(--border-color)'
+                }`,
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {dlState.status === 'converting' && <Loader2 size={18} className="animate-spin" color="var(--accent-primary)" />}
+                  {dlState.status === 'completed' && <Check size={18} color="#10b981" />}
+                  {dlState.status === 'error' && <AlertCircle size={18} color="#ef4444" />}
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                    {dlState.message}
+                  </span>
+                </div>
+
+                {dlState.downloadUrl && (
+                  <button
+                    onClick={() => triggerDirectDownload(dlState.downloadUrl!, dlState.format || 'mp4')}
+                    className="btn-primary"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                  >
+                    <Download size={14} /> Download File Again
+                  </button>
+                )}
+              </div>
+
+              {dlState.status === 'converting' && (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: 'var(--border-color)',
+                    borderRadius: '3px',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${dlState.progress}%`,
+                      height: '100%',
+                      backgroundColor: 'var(--accent-primary)',
+                      transition: 'width 300ms ease',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Thumbnail Downloader Section */}
           <div
@@ -239,7 +443,6 @@ export const YoutubeDownloaderTool: React.FC = () => {
                     alt={t.quality}
                     style={{ width: '100%', height: '110px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem' }}
                     onError={(e) => {
-                      // Fallback image if 1080p thumbnail isn't generated for low res videos
                       (e.target as HTMLElement).setAttribute('src', videoInfo.thumbnailUrl);
                     }}
                   />
