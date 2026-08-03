@@ -208,13 +208,9 @@ export const PomodoroTool: React.FC = () => {
     setIsRunning(false);
     targetEndTimeRef.current = null;
     if (mode === 'work') {
-      const nextCount = completedSessions + 1;
-      setCompletedSessions(nextCount);
-      if (nextCount % 4 === 0) {
-        setMode('longBreak');
-      } else {
-        setMode('shortBreak');
-      }
+      setMode('shortBreak');
+    } else if (mode === 'shortBreak') {
+      setMode('longBreak');
     } else {
       setMode('work');
     }
