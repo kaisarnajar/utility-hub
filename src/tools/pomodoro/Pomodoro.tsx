@@ -383,22 +383,17 @@ export const PomodoroTool: React.FC = () => {
         </button>
       </div>
 
-      {/* Stats & Settings Toggle */}
+      {/* Settings Toggle */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           borderTop: '1px solid var(--border-color)',
           paddingTop: '1rem',
           marginTop: '0.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          <CheckCircle size={16} color="var(--accent-primary)" />
-          <span>Sessions Completed: <strong>{completedSessions}</strong></span>
-        </div>
-
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="btn-secondary"
