@@ -196,8 +196,17 @@ export const PomodoroTool: React.FC = () => {
   const handleSkip = () => {
     setIsRunning(false);
     targetEndTimeRef.current = null;
-    if (mode === 'work') setMode('shortBreak');
-    else setMode('work');
+    if (mode === 'work') {
+      const nextCount = completedSessions + 1;
+      setCompletedSessions(nextCount);
+      if (nextCount % 4 === 0) {
+        setMode('longBreak');
+      } else {
+        setMode('shortBreak');
+      }
+    } else {
+      setMode('work');
+    }
   };
 
   const totalModeDuration =
@@ -368,12 +377,17 @@ export const PomodoroTool: React.FC = () => {
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           borderTop: '1px solid var(--border-color)',
           paddingTop: '1rem',
           marginTop: '0.5rem',
         }}
       >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <CheckCircle size={16} color="var(--accent-primary)" />
+          <span>Sessions Completed: <strong>{completedSessions}</strong></span>
+        </div>
+
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="btn-secondary"
