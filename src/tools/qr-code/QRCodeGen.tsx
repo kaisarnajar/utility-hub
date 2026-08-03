@@ -1,16 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Download, Copy, Check, QrCode as QrIcon } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 export const QRCodeTool: React.FC = () => {
+  const { theme } = useTheme();
   const [text, setText] = useState<string>('https://github.com');
-  const [darkColor, setDarkColor] = useState<string>('#000000');
-  const [lightColor, setLightColor] = useState<string>('#ffffff');
+  const [darkColor, setDarkColor] = useState<string>(theme === 'dark' ? '#ffffff' : '#000000');
+  const [lightColor, setLightColor] = useState<string>(theme === 'dark' ? '#141c2e' : '#ffffff');
   const [errorCorrectionLevel, setErrorCorrectionLevel] = useState<'L' | 'M' | 'Q' | 'H'>('M');
   const [size, setSize] = useState<number>(256);
 
   const [copied, setCopied] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Auto select foreground & background color matching current active theme (light / dark)
+  useEffect(() => {
+    if (theme === 'dark') {
+      setDarkColor('#ffffff');
+      setLightColor('#141c2e');
+    } else {
+      setDarkColor('#000000');
+      setLightColor('#ffffff');
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (canvasRef.current && text.trim().length > 0) {
