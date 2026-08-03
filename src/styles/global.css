@@ -503,6 +503,40 @@ html, body {
   gap: 1.5rem;
 }
 
+/* JSON Syntax Highlighting */
+.json-highlight-container {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-subtle);
+  color: var(--text-main);
+  min-height: 340px;
+  max-height: 550px;
+  overflow: auto;
+  margin: 0;
+}
+
+[data-theme='light'] .json-key { color: #2563eb; font-weight: 600; }
+[data-theme='light'] .json-string { color: #059669; }
+[data-theme='light'] .json-number { color: #d97706; font-weight: 600; }
+[data-theme='light'] .json-boolean { color: #9333ea; font-weight: 600; }
+[data-theme='light'] .json-null { color: #dc2626; font-weight: 600; }
+[data-theme='light'] .json-bracket { color: #4f46e5; font-weight: 700; }
+[data-theme='light'] .json-colon { color: #64748b; font-weight: 600; }
+
+[data-theme='dark'] .json-key { color: #60a5fa; font-weight: 600; }
+[data-theme='dark'] .json-string { color: #34d399; }
+[data-theme='dark'] .json-number { color: #fbbf24; font-weight: 600; }
+[data-theme='dark'] .json-boolean { color: #c084fc; font-weight: 600; }
+[data-theme='dark'] .json-null { color: #f87171; font-weight: 600; }
+[data-theme='dark'] .json-bracket { color: #a78bfa; font-weight: 700; }
+[data-theme='dark'] .json-colon { color: #94a3b8; font-weight: 600; }
+
 .tool-input-group {
   display: flex;
   flex-direction: column;

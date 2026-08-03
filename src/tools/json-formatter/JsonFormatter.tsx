@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Copy, Download, Trash2, Check, AlertCircle, FileCode, Code } from 'lucide-react';
 
 const SAMPLE_JSON = `{
@@ -16,6 +16,37 @@ const SAMPLE_JSON = `{
   }
 }`;
 
+function highlightJsonToHtml(json: string): string {
+  if (!json) return '';
+
+  const htmlEscaped = json
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  return htmlEscaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[\{\}\[\]])/g,
+    (match) => {
+      let cls = 'json-number';
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          const keyText = match.slice(0, -1);
+          return `<span class="json-key">${keyText}</span><span class="json-colon">:</span>`;
+        } else {
+          cls = 'json-string';
+        }
+      } else if (/true|false/.test(match)) {
+        cls = 'json-boolean';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      } else if (/[\{\}\[\]]/.test(match)) {
+        return `<span class="json-bracket">${match}</span>`;
+      }
+      return `<span class="${cls}">${match}</span>`;
+    }
+  );
+}
+
 export const JsonFormatterTool: React.FC = () => {
   const [inputJson, setInputJson] = useState<string>(SAMPLE_JSON);
   const [formattedJson, setFormattedJson] = useState<string>('');
@@ -23,19 +54,24 @@ export const JsonFormatterTool: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
-  const formatJson = (spaces: number = indent) => {
+  const formatJson = (spaces: number = indent, customInput?: string) => {
     setErrorMsg(null);
-    if (!inputJson.trim()) {
+    const textToParse = customInput !== undefined ? customInput : inputJson;
+    if (!textToParse.trim()) {
       setFormattedJson('');
       return;
     }
     try {
-      const parsed = JSON.parse(inputJson);
+      const parsed = JSON.parse(textToParse);
       setFormattedJson(JSON.stringify(parsed, null, spaces));
     } catch (err: any) {
       setErrorMsg(err.message || 'Invalid JSON format');
     }
   };
+
+  useEffect(() => {
+    formatJson(2, SAMPLE_JSON);
+  }, []);
 
   const minifyJson = () => {
     setErrorMsg(null);
@@ -94,7 +130,7 @@ export const JsonFormatterTool: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button onClick={() => formatJson(2)} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+          <button onClick={() => formatJson(indent)} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
             <Code size={16} /> Format (Pretty)
           </button>
 
@@ -119,6 +155,7 @@ export const JsonFormatterTool: React.FC = () => {
           <button
             onClick={() => {
               setInputJson(SAMPLE_JSON);
+              formatJson(indent, SAMPLE_JSON);
               setErrorMsg(null);
             }}
             className="btn-secondary"
@@ -173,8 +210,10 @@ export const JsonFormatterTool: React.FC = () => {
             placeholder="Paste your unformatted JSON string here..."
             value={inputJson}
             onChange={(e) => {
-              setInputJson(e.target.value);
+              const val = e.target.value;
+              setInputJson(val);
               setErrorMsg(null);
+              formatJson(indent, val);
             }}
             rows={16}
             style={{ width: '100%', resize: 'vertical', minHeight: '340px' }}
@@ -182,15 +221,17 @@ export const JsonFormatterTool: React.FC = () => {
         </div>
 
         <div className="tool-input-group">
-          <label className="tool-label">Formatted Output</label>
-          <textarea
-            className="tool-textarea-field mono"
-            placeholder="Formatted result will appear here..."
-            value={formattedJson}
-            readOnly
-            rows={16}
-            style={{ width: '100%', resize: 'vertical', minHeight: '340px', backgroundColor: 'var(--bg-subtle)' }}
-          />
+          <label className="tool-label">Formatted & Colorized Output</label>
+          {formattedJson ? (
+            <pre
+              className="json-highlight-container"
+              dangerouslySetInnerHTML={{ __html: highlightJsonToHtml(formattedJson) }}
+            />
+          ) : (
+            <div className="json-highlight-container" style={{ color: 'var(--text-muted)' }}>
+              Formatted result with color highlighting will appear here...
+            </div>
+          )}
         </div>
       </div>
     </div>
