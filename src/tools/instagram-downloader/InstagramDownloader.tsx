@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Instagram, Download, AlertCircle, Loader2, Play, Image, Sparkles, ExternalLink } from 'lucide-react';
+import { Instagram, Download, AlertCircle, Loader2, Image, Check, FileVideo, Music } from 'lucide-react';
 
 interface InstagramPostData {
   shortcode: string;
@@ -7,11 +7,27 @@ interface InstagramPostData {
   type: 'reel' | 'post';
 }
 
+interface DownloadProgressState {
+  status: 'idle' | 'converting' | 'downloading' | 'completed' | 'error';
+  format: string | null;
+  progress: number;
+  message: string;
+  downloadUrl: string | null;
+}
+
 export const InstagramDownloaderTool: React.FC = () => {
   const [url, setUrl] = useState<string>('https://www.instagram.com/reel/C123456789/');
   const [loading, setLoading] = useState<boolean>(false);
   const [postData, setPostData] = useState<InstagramPostData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [dlState, setDlState] = useState<DownloadProgressState>({
+    status: 'idle',
+    format: null,
+    progress: 0,
+    message: '',
+    downloadUrl: null,
+  });
 
   const extractShortcode = (inputUrl: string): { shortcode: string; type: 'reel' | 'post' } | null => {
     const match = inputUrl.match(/instagram\.com\/(reel|p|tv)\/([a-zA-Z0-9_-]+)/);
@@ -26,6 +42,8 @@ export const InstagramDownloaderTool: React.FC = () => {
 
   const handleParseInstagram = () => {
     setError(null);
+    setDlState({ status: 'idle', format: null, progress: 0, message: '', downloadUrl: null });
+
     const extracted = extractShortcode(url.trim());
 
     if (!extracted) {
@@ -46,16 +64,121 @@ export const InstagramDownloaderTool: React.FC = () => {
     }, 400);
   };
 
-  const handleDownloadRedirect = (format: 'video' | 'photo') => {
+  const triggerDirectDownload = (downloadUrl: string, formatKey: string) => {
+    const ext = formatKey === 'mp3' ? 'mp3' : formatKey === 'photo' ? 'jpg' : 'mp4';
+    const fileName = `instagram-${postData?.type || 'media'}-${postData?.shortcode}.${ext}`;
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleInAppDownload = async (formatKey: 'video' | 'mp3' | 'photo') => {
     if (!postData) return;
+
+    setDlState({
+      status: 'converting',
+      format: formatKey,
+      progress: 10,
+      message: 'Connecting to Instagram media stream processor...',
+      downloadUrl: null,
+    });
+
     const targetUrl = `https://www.instagram.com/p/${postData.shortcode}/`;
-    // Fast privacy-friendly web service redirect
-    const downloadServiceUrl = `https://fastdl.app/en?url=${encodeURIComponent(targetUrl)}`;
-    window.open(downloadServiceUrl, '_blank');
+    const formatQuery = formatKey === 'mp3' ? 'mp3' : '1080';
+
+    try {
+      // Step 1: Initiate background conversion request
+      const initRes = await fetch(
+        `https://loader.to/ajax/download.php?format=${formatQuery}&url=${encodeURIComponent(targetUrl)}`
+      );
+      const initData = await initRes.json();
+
+      if (!initData || (!initData.progress_url && !initData.id)) {
+        throw new Error('Conversion service did not respond with a valid stream ID.');
+      }
+
+      const progressUrl =
+        initData.progress_url || `https://lto2.affadaffa.com/api/progress?id=${initData.id}`;
+
+      setDlState((prev) => ({
+        ...prev,
+        progress: 25,
+        message: `Extracting ${formatKey === 'mp3' ? 'audio' : 'video'} stream in HD quality...`,
+      }));
+
+      // Step 2: Poll conversion progress until complete
+      let attempts = 0;
+      const maxAttempts = 30;
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const progRes = await fetch(progressUrl);
+          const progData = await progRes.json();
+
+          const calcProgress = Math.min(95, 25 + Math.floor(attempts * 2.5));
+
+          setDlState((prev) => ({
+            ...prev,
+            progress: calcProgress,
+            message: progData.text || `Processing Instagram media... (${attempts * 4}%)`,
+          }));
+
+          if (progData.download_url) {
+            clearInterval(pollInterval);
+
+            setDlState({
+              status: 'completed',
+              format: formatKey,
+              progress: 100,
+              message: 'Download complete! Media file saved directly to your device.',
+              downloadUrl: progData.download_url,
+            });
+
+            // Trigger direct in-app download
+            triggerDirectDownload(progData.download_url, formatKey);
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setDlState({
+              status: 'error',
+              format: formatKey,
+              progress: 0,
+              message: 'Media processing timed out. Please try again.',
+              downloadUrl: null,
+            });
+          }
+        } catch (pollErr) {
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setDlState({
+              status: 'error',
+              format: formatKey,
+              progress: 0,
+              message: 'Failed to poll stream progress.',
+              downloadUrl: null,
+            });
+          }
+        }
+      }, 1200);
+    } catch (err: any) {
+      setDlState({
+        status: 'error',
+        format: formatKey,
+        progress: 0,
+        message: err.message || 'Instagram media processing failed.',
+        downloadUrl: null,
+      });
+    }
   };
 
   return (
-    <div className="tool-container" style={{ maxWidth: '720px', margin: '0 auto' }}>
+    <div className="tool-container" style={{ maxWidth: '780px', margin: '0 auto' }}>
       {/* Input Group */}
       <div className="tool-input-group">
         <label className="tool-label">Instagram Reel / Post URL</label>
@@ -94,7 +217,7 @@ export const InstagramDownloaderTool: React.FC = () => {
         </div>
       )}
 
-      {/* Media Details & Download Panel */}
+      {/* Media Details & Direct Download Panel */}
       {postData && (
         <div
           style={{
@@ -126,29 +249,109 @@ export const InstagramDownloaderTool: React.FC = () => {
             />
           </div>
 
-          {/* Download Action Buttons */}
+          {/* In-App Action Buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Download Media File in Full Quality:
+              Download Directly In-App (No Redirects):
             </span>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
               <button
-                onClick={() => handleDownloadRedirect('video')}
+                onClick={() => handleInAppDownload('video')}
+                disabled={dlState.status === 'converting'}
                 className="btn-primary"
-                style={{ flex: 1, padding: '0.75rem 1rem' }}
+                style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', justifyContent: 'center' }}
               >
-                <Download size={18} /> Download HD Reel / Video (MP4)
+                <FileVideo size={16} /> Download HD Video (MP4)
               </button>
 
               <button
-                onClick={() => handleDownloadRedirect('photo')}
+                onClick={() => handleInAppDownload('mp3')}
+                disabled={dlState.status === 'converting'}
                 className="btn-secondary"
-                style={{ flex: 1, padding: '0.75rem 1rem' }}
+                style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', justifyContent: 'center' }}
               >
-                <Image size={18} /> Download Cover / Photo (JPG)
+                <Music size={16} /> Download Audio (MP3)
+              </button>
+
+              <button
+                onClick={() => handleInAppDownload('photo')}
+                disabled={dlState.status === 'converting'}
+                className="btn-secondary"
+                style={{ padding: '0.7rem 1rem', fontSize: '0.85rem', justifyContent: 'center' }}
+              >
+                <Image size={16} /> Download Cover Photo (JPG)
               </button>
             </div>
           </div>
+
+          {/* Active Progress Indicator Banner */}
+          {dlState.status !== 'idle' && (
+            <div
+              style={{
+                backgroundColor:
+                  dlState.status === 'error'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : dlState.status === 'completed'
+                    ? 'rgba(16, 185, 129, 0.1)'
+                    : 'var(--bg-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                border: `1px solid ${
+                  dlState.status === 'error'
+                    ? 'rgba(239, 68, 68, 0.3)'
+                    : dlState.status === 'completed'
+                    ? 'rgba(16, 185, 129, 0.3)'
+                    : 'var(--border-color)'
+                }`,
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {dlState.status === 'converting' && <Loader2 size={18} className="animate-spin" color="var(--accent-primary)" />}
+                  {dlState.status === 'completed' && <Check size={18} color="#10b981" />}
+                  {dlState.status === 'error' && <AlertCircle size={18} color="#ef4444" />}
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                    {dlState.message}
+                  </span>
+                </div>
+
+                {dlState.downloadUrl && (
+                  <button
+                    onClick={() => triggerDirectDownload(dlState.downloadUrl!, dlState.format || 'video')}
+                    className="btn-primary"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                  >
+                    <Download size={14} /> Download File Again
+                  </button>
+                )}
+              </div>
+
+              {dlState.status === 'converting' && (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '6px',
+                    backgroundColor: 'var(--border-color)',
+                    borderRadius: '3px',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${dlState.progress}%`,
+                      height: '100%',
+                      backgroundColor: 'var(--accent-primary)',
+                      transition: 'width 300ms ease',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
